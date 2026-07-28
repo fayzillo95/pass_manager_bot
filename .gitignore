@@ -1,0 +1,6 @@
+.env
+vault.bin
+accounts.enc
+vault.meta.json
+__pycache__/
+*.pyc
