@@ -7,6 +7,7 @@ import urllib.parse
 import hashlib
 import shutil
 import threading
+import subprocess
 from cryptography.fernet import Fernet, InvalidToken
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
@@ -45,8 +46,17 @@ def load_env():
     return env
 
 env = load_env()
-BOT_TOKEN = env.get("BOT_TOKEN")
-ALLOWED_USER_ID = env.get("ALLOWED_USER_ID")
+
+def get_config(key):
+    val = os.environ.get(key)
+    if val:
+        return val
+    return env.get(key)
+
+BOT_TOKEN = get_config("BOT_TOKEN")
+ALLOWED_USER_ID = get_config("ALLOWED_USER_ID")
+GITHUB_TOKEN = get_config("GITHUB_TOKEN")
+GITHUB_REPO = get_config("GITHUB_REPO")
 
 # Seanslar: {chat_id: {"dek": dek_bytes, "state": state_str, "last_activity": float, "temp": {}, "msg_ids": []}}
 sessions = {}
@@ -151,6 +161,57 @@ def save_accounts(dek: bytes, accounts: dict) -> None:
     token = Fernet(dek).encrypt(raw)
     with open(DATA_PATH, "wb") as f:
         f.write(token)
+    # Yangilanishlarni GitHub'ga push qilish
+    sync_github_push()
+
+# GitHub'ga shifrlangan bazani push qilish
+def sync_github_push():
+    token = get_config("GITHUB_TOKEN")
+    repo = get_config("GITHUB_REPO")
+    if not token or not repo:
+        print("GitHub token yoki repo topilmadi. Auto-push o'tkazib yuborildi.")
+        return False
+    
+    print("GitHub'ga ma'lumotlarni yuborish (push)...")
+    try:
+        remote_url = f"https://x-access-token:{token}@github.com/{repo}.git"
+        
+        # Git sozlamalarini faqat ushbu repo uchun moslash
+        subprocess.run(["git", "config", "user.name", "SecVault Bot"], cwd=REPO_DIR, check=False)
+        subprocess.run(["git", "config", "user.email", "bot@secvault.local"], cwd=REPO_DIR, check=False)
+        
+        # Remote URL ni token bilan sozlash
+        subprocess.run(["git", "remote", "set-url", "origin", remote_url], cwd=REPO_DIR, check=False)
+        
+        # Fayllarni gitga kiritish va push qilish
+        subprocess.run(["git", "add", "-f", "accounts.enc", "vault.meta.json"], cwd=REPO_DIR, check=True)
+        subprocess.run(["git", "commit", "-m", "backup: update vault data in real-time"], cwd=REPO_DIR, capture_output=True)
+        subprocess.run(["git", "push", "origin", "main"], cwd=REPO_DIR, check=True)
+        
+        print("Muvaffaqiyatli GitHub'ga push qilindi!")
+        return True
+    except Exception as e:
+        print(f"GitHub'ga push qilishda xatolik yuz berdi: {e}")
+        return False
+
+# GitHub'dan shifrlangan bazani pull qilish
+def sync_github_pull():
+    token = get_config("GITHUB_TOKEN")
+    repo = get_config("GITHUB_REPO")
+    if not token or not repo:
+        print("GitHub token yoki repo topilmadi. Auto-pull o'tkazib yuborildi.")
+        return False
+    
+    print("GitHub'dan yangi ma'lumotlarni olish (pull)...")
+    try:
+        remote_url = f"https://x-access-token:{token}@github.com/{repo}.git"
+        subprocess.run(["git", "remote", "set-url", "origin", remote_url], cwd=REPO_DIR, check=False)
+        subprocess.run(["git", "pull", "origin", "main"], cwd=REPO_DIR, check=True)
+        print("Muvaffaqiyatli GitHub'dan pull qilindi!")
+        return True
+    except Exception as e:
+        print(f"GitHub'dan pull qilishda xatolik yuz berdi: {e}")
+        return False
 
 def mask_email(email: str) -> str:
     if "@" not in email:
@@ -169,7 +230,8 @@ def send_main_menu(chat_id, text="Menyudan tanlang:"):
             [{"text": "📋 To'liq list"}, {"text": "📧 Emaillar"}],
             [{"text": "👁️ Masked list"}, {"text": "➕ Yangi qo'shish"}],
             [{"text": "✏️ Tahrirlash"}, {"text": "❌ O'chirish"}],
-            [{"text": "🧹 Chatni tozalash"}, {"text": "🔒 Qulflash"}]
+            [{"text": "🔄 GitHub Sync"}, {"text": "🧹 Chatni tozalash"}],
+            [{"text": "🔒 Qulflash"}]
         ],
         "resize_keyboard": True,
         "one_time_keyboard": False
@@ -491,6 +553,19 @@ def handle_message(message):
         # Tozalashdan keyin yangi toza menyu chiqarish
         send_main_menu(chat_id, "🧹 Chat tozalandi! Yangi seans boshlandi.")
         
+    elif text == "🔄 GitHub Sync":
+        send_msg(chat_id, "🔄 GitHub bilan sinxronizatsiya boshlandi...")
+        pull_ok = sync_github_pull()
+        push_ok = sync_github_push()
+        
+        # Yangi ma'lumotlarni xotiraga yuklash
+        accounts = load_accounts(dek)
+        
+        if pull_ok or push_ok:
+            send_main_menu(chat_id, "✅ GitHub bilan sinxronizatsiya yakunlandi!")
+        else:
+            send_main_menu(chat_id, "❌ Sinxronizatsiya amalga oshmadi. .env dagi GitHub ma'lumotlarini tekshiring.")
+        
     elif text == "🔒 Qulflash":
         lock_session(chat_id, "Sizning so'rovingizga ko'ra seans yopildi.")
 
@@ -547,6 +622,9 @@ def main():
     if not BOT_TOKEN:
         print("XATOLIK: .env faylida BOT_TOKEN topilmadi!")
         return
+        
+    # Bazani GitHub'dan tortib olish (pull)
+    sync_github_pull()
         
     # Eski yozishmalarni tozalash
     startup_clean()
