@@ -264,8 +264,8 @@ def send_main_menu(chat_id, text="Menyudan tanlang:"):
             [{"text": "📋 To'liq list"}, {"text": "📧 Emaillar"}],
             [{"text": "👁️ Masked list"}, {"text": "➕ Yangi qo'shish"}],
             [{"text": "✏️ Tahrirlash"}, {"text": "❌ O'chirish"}],
-            [{"text": "🔄 GitHub Sync"}, {"text": "🧹 Chatni tozalash"}],
-            [{"text": "🔒 Qulflash"}]
+            [{"text": "🔄 GitHub Sync"}, {"text": "⚙️ GitHub Status"}],
+            [{"text": "🧹 Chatni tozalash"}, {"text": "🔒 Qulflash"}]
         ],
         "resize_keyboard": True,
         "one_time_keyboard": False
@@ -701,6 +701,37 @@ def handle_message(message):
             send_main_menu(chat_id, "✅ GitHub bilan sinxronizatsiya yakunlandi!")
         else:
             send_main_menu(chat_id, "❌ Sinxronizatsiya amalga oshmadi. .env dagi GitHub ma'lumotlarini tekshiring.")
+            
+    elif text == "⚙️ GitHub Status":
+        token = get_github_token()
+        repo = get_github_repo()
+        
+        masked_token = "Sozlanmagan ❌"
+        if token:
+            masked_token = token[:7] + "..." + token[-4:] if len(token) > 10 else "Sozlangan ✅"
+            
+        repo_status = repo if repo else "Sozlanmagan ❌"
+        
+        try:
+            # Serverdagi git holatini olish
+            git_status_res = subprocess.run(["git", "status", "-s"], cwd=REPO_DIR, capture_output=True, text=True)
+            git_status = git_status_res.stdout.strip() if git_status_res.stdout.strip() else "Barcha fayllar toza (Synced) ✅"
+            
+            git_commit_res = subprocess.run(["git", "log", "-1", "--oneline"], cwd=REPO_DIR, capture_output=True, text=True)
+            last_commit = git_commit_res.stdout.strip() if git_commit_res.returncode == 0 else "Noma'lum"
+        except Exception as e:
+            git_status = f"Git status xatosi: {e}"
+            last_commit = "Noma'lum"
+            
+        status_text = (
+            "⚙️ *GitHub Sinxronizatsiya Holati:*\n\n"
+            f"📦 *Repozitoriya:* `{repo_status}`\n"
+            f"🔑 *Token:* `{masked_token}`\n\n"
+            f"📊 *Git Status (Server):*\n`{git_status}`\n\n"
+            f"📝 *Oxirgi commit (Backup):*\n`{last_commit}`\n\n"
+            "💡 *O'zgartirish:* `/set_token <token>` yoki `/set_repo <owner/repo>`"
+        )
+        send_msg(chat_id, status_text, parse_mode="Markdown")
         
     elif text == "🔒 Qulflash":
         lock_session(chat_id, "Sizning so'rovingizga ko'ra seans yopildi.")
