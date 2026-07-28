@@ -209,8 +209,9 @@ def sync_github_push():
         subprocess.run(["git", "config", "user.name", "SecVault Bot"], cwd=REPO_DIR, check=False)
         subprocess.run(["git", "config", "user.email", "bot@secvault.local"], cwd=REPO_DIR, check=False)
         
-        # Remote URL ni token bilan sozlash
-        subprocess.run(["git", "remote", "set-url", "origin", remote_url], cwd=REPO_DIR, check=False)
+        # Origin ulanishini boshidan toza sozlash (Render'da remote mavjud bo'lmasligi mumkin)
+        subprocess.run(["git", "remote", "remove", "origin"], cwd=REPO_DIR, check=False)
+        subprocess.run(["git", "remote", "add", "origin", remote_url], cwd=REPO_DIR, check=True)
         
         # Fayllarni gitga kiritish va push qilish
         subprocess.run(["git", "add", "-f", "accounts.enc", "vault.meta.json"], cwd=REPO_DIR, check=True)
@@ -234,7 +235,11 @@ def sync_github_pull():
     print("GitHub'dan yangi ma'lumotlarni olish (pull)...")
     try:
         remote_url = f"https://x-access-token:{token}@github.com/{repo}.git"
-        subprocess.run(["git", "remote", "set-url", "origin", remote_url], cwd=REPO_DIR, check=False)
+        
+        # Origin ulanishini boshidan toza sozlash
+        subprocess.run(["git", "remote", "remove", "origin"], cwd=REPO_DIR, check=False)
+        subprocess.run(["git", "remote", "add", "origin", remote_url], cwd=REPO_DIR, check=True)
+        
         subprocess.run(["git", "pull", "origin", "main"], cwd=REPO_DIR, check=True)
         print("Muvaffaqiyatli GitHub'dan pull qilindi!")
         return True
