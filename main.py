@@ -55,8 +55,37 @@ def get_config(key):
 
 BOT_TOKEN = get_config("BOT_TOKEN")
 ALLOWED_USER_ID = get_config("ALLOWED_USER_ID")
-GITHUB_TOKEN = get_config("GITHUB_TOKEN")
-GITHUB_REPO = get_config("GITHUB_REPO")
+
+CONFIG_PATH = os.path.join(REPO_DIR, "github_config.json")
+
+def load_github_config():
+    if os.path.exists(CONFIG_PATH):
+        try:
+            with open(CONFIG_PATH, "r") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {}
+
+def save_github_config(token=None, repo=None):
+    cfg = load_github_config()
+    if token is not None:
+        cfg["token"] = token
+    if repo is not None:
+        cfg["repo"] = repo
+    try:
+        with open(CONFIG_PATH, "w") as f:
+            json.dump(cfg, f, indent=2)
+    except Exception as e:
+        print(f"GitHub config saqlashda xatolik: {e}")
+
+def get_github_token():
+    cfg = load_github_config()
+    return cfg.get("token") or get_config("GITHUB_TOKEN")
+
+def get_github_repo():
+    cfg = load_github_config()
+    return cfg.get("repo") or get_config("GITHUB_REPO")
 
 # Seanslar: {chat_id: {"dek": dek_bytes, "state": state_str, "last_activity": float, "temp": {}, "msg_ids": []}}
 sessions = {}
@@ -166,8 +195,8 @@ def save_accounts(dek: bytes, accounts: dict) -> None:
 
 # GitHub'ga shifrlangan bazani push qilish
 def sync_github_push():
-    token = get_config("GITHUB_TOKEN")
-    repo = get_config("GITHUB_REPO")
+    token = get_github_token()
+    repo = get_github_repo()
     if not token or not repo:
         print("GitHub token yoki repo topilmadi. Auto-push o'tkazib yuborildi.")
         return False
@@ -196,8 +225,8 @@ def sync_github_push():
 
 # GitHub'dan shifrlangan bazani pull qilish
 def sync_github_pull():
-    token = get_config("GITHUB_TOKEN")
-    repo = get_config("GITHUB_REPO")
+    token = get_github_token()
+    repo = get_github_repo()
     if not token or not repo:
         print("GitHub token yoki repo topilmadi. Auto-pull o'tkazib yuborildi.")
         return False
@@ -423,6 +452,52 @@ def handle_message(message):
 
     dek = sess["dek"]
     accounts = load_accounts(dek)
+
+    # --- GitHub Sozlamalari Buyruqlari ---
+    if text.startswith("/set_token"):
+        call_api("deleteMessage", {"chat_id": chat_id, "message_id": msg_id})
+        if msg_id in sess["msg_ids"]:
+            sess["msg_ids"].remove(msg_id)
+            
+        parts = text.split(maxsplit=1)
+        if len(parts) < 2:
+            send_msg(chat_id, "❌ Format noto'g'ri!\nFoydalanish: `/set_token <token>`")
+            return
+        
+        token = parts[1]
+        save_github_config(token=token)
+        send_msg(chat_id, "✅ GitHub Personal Access Token muvaffaqiyatli saqlandi! (Matn xavfsizlik uchun chatdan o'chirildi)")
+        return
+
+    elif text.startswith("/set_repo"):
+        parts = text.split(maxsplit=1)
+        if len(parts) < 2:
+            send_msg(chat_id, "❌ Format noto'g'ri!\nFoydalanish: `/set_repo <owner/repo>`")
+            return
+            
+        repo = parts[1]
+        save_github_config(repo=repo)
+        send_msg(chat_id, f"✅ GitHub repozitoriyasi sozlandi: `{repo}`")
+        return
+
+    elif text == "/github_status":
+        token = get_github_token()
+        repo = get_github_repo()
+        
+        masked_token = "Sozlanmagan ❌"
+        if token:
+            masked_token = token[:7] + "..." + token[-4:] if len(token) > 10 else "Sozlangan ✅"
+            
+        repo_status = repo if repo else "Sozlanmagan ❌"
+        
+        status_text = (
+            "⚙️ *GitHub Sinxronizatsiya Holati:*\n\n"
+            f"📦 *Repozitoriya:* `{repo_status}`\n"
+            f"🔑 *Token:* `{masked_token}`\n\n"
+            "💡 *O'zgartirish:* `/set_token <token>` yoki `/set_repo <owner/repo>`"
+        )
+        send_msg(chat_id, status_text, parse_mode="Markdown")
+        return
 
     # State Machine bo'yicha ma'lumotlar kiritish
     if sess["state"] != "unlocked":
