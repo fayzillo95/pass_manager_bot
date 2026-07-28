@@ -15,6 +15,7 @@ from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 REPO_DIR = os.path.dirname(os.path.abspath(__file__))
 META_PATH = os.path.join(REPO_DIR, "vault.meta.json")
 DATA_PATH = os.path.join(REPO_DIR, "accounts.enc")
+MSG_IDS_PATH = os.path.join(REPO_DIR, "msg_ids.json")
 PBKDF2_ITERATIONS = 390000
 SESSION_TIMEOUT = 300  # 5 daqiqa faollik muddati
 
@@ -66,12 +67,39 @@ def call_api(method, params=None):
         print(f"Telegram API xatosi ({method}): {e}")
         return None
 
+# Diskdan xabar ID'larini yuklash
+def load_msg_ids():
+    if os.path.exists(MSG_IDS_PATH):
+        try:
+            with open(MSG_IDS_PATH, "r") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {}
+
+# Diskka xabar ID'larini yozish
+def save_msg_ids(all_ids):
+    try:
+        with open(MSG_IDS_PATH, "w") as f:
+            json.dump(all_ids, f)
+    except Exception as e:
+        print(f"Msg IDs saqlashda xatolik: {e}")
+
+# Hozirgi seanslar ID'larini diskda yangilash
+def save_current_msg_ids():
+    data = {}
+    for chat_id, sess in sessions.items():
+        if "msg_ids" in sess:
+            data[str(chat_id)] = sess["msg_ids"]
+    save_msg_ids(data)
+
 # Xabarlarni kuzatish (Message tracking)
 def track_msg(chat_id, msg_id):
     if chat_id in sessions:
         if "msg_ids" not in sessions[chat_id]:
             sessions[chat_id]["msg_ids"] = []
         sessions[chat_id]["msg_ids"].append(msg_id)
+        save_current_msg_ids()
 
 # Xabar yuborish va ID sini saqlab qolish
 def send_msg(chat_id, text, reply_markup=None, parse_mode=None):
@@ -95,6 +123,7 @@ def clear_chat_messages(chat_id):
         for msg_id in reversed(sessions[chat_id]["msg_ids"]):
             call_api("deleteMessage", {"chat_id": chat_id, "message_id": msg_id})
         sessions[chat_id]["msg_ids"] = []
+        save_current_msg_ids()
 
 # Kalit hosil qilish
 def derive_key(secret: str, salt: bytes) -> bytes:
@@ -498,12 +527,29 @@ def setup_bot_profile():
     ]
     call_api("setMyCommands", {"commands": json.dumps(commands)})
 
+# Ishga tushganda eski xabarlarni chatdan o'chirish (Crash'dan himoya)
+def startup_clean():
+    print("Eski yozishmalarni tozalash...")
+    old_data = load_msg_ids()
+    for chat_id_str, msg_ids in old_data.items():
+        try:
+            chat_id = int(chat_id_str)
+            for msg_id in reversed(msg_ids):
+                call_api("deleteMessage", {"chat_id": chat_id, "message_id": msg_id})
+        except Exception as e:
+            print(f"Eski xabarni o'chirishda xatolik: {e}")
+    # Baza tozalangandan so'ng diskdagi faylni ham bo'shatamiz
+    save_msg_ids({})
+
 # Polling loop
 def main():
     print("Bot ishga tushdi...")
     if not BOT_TOKEN:
         print("XATOLIK: .env faylida BOT_TOKEN topilmadi!")
         return
+        
+    # Eski yozishmalarni tozalash
+    startup_clean()
         
     # Bot profilini sozlash
     setup_bot_profile()
