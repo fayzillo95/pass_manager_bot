@@ -499,6 +499,62 @@ def handle_message(message):
         send_msg(chat_id, status_text, parse_mode="Markdown")
         return
 
+    # --- Seed (Master Parol) va Saltni o'zgartirish ---
+    elif text.startswith("/change_seed"):
+        call_api("deleteMessage", {"chat_id": chat_id, "message_id": msg_id})
+        if msg_id in sess["msg_ids"]:
+            sess["msg_ids"].remove(msg_id)
+            
+        parts = text.split(maxsplit=1)
+        if len(parts) < 2:
+            send_msg(chat_id, "❌ Format noto'g'ri!\nFoydalanish: `/change_seed <yangi_seed>`")
+            return
+            
+        new_seed = parts[1]
+        meta = load_meta()
+        
+        # Yangi tuz (salt) yaratish va kalitni qayta shifrlash
+        new_salt = os.urandom(16)
+        new_key = derive_key(new_seed, new_salt)
+        
+        meta["salt_seed"] = base64.b64encode(new_salt).decode()
+        meta["wrapped_key_seed"] = Fernet(new_key).encrypt(dek).decode()
+        
+        save_meta(meta)
+        sync_github_push()
+        
+        send_msg(chat_id, "✅ Seed parol va Salt muvaffaqiyatli yangilandi va sinxronizatsiya qilindi! (Matn xavfsizlik uchun chatdan o'chirildi)")
+        return
+
+    # --- Tiklash savol-javobi va Saltni o'zgartirish ---
+    elif text.startswith("/change_recovery"):
+        call_api("deleteMessage", {"chat_id": chat_id, "message_id": msg_id})
+        if msg_id in sess["msg_ids"]:
+            sess["msg_ids"].remove(msg_id)
+            
+        parts = text.split(maxsplit=1)
+        if len(parts) < 2 or "|" not in parts[1]:
+            send_msg(chat_id, "❌ Format noto'g'ri!\nFoydalanish: `/change_recovery <savol>|<javob>`\nMisol: `/change_recovery Maktabingiz?|7`")
+            return
+            
+        q_a = parts[1].split("|", 1)
+        new_question = q_a[0].strip()
+        new_answer = q_a[1].strip()
+        
+        meta = load_meta()
+        new_salt = os.urandom(16)
+        new_key = derive_key(new_answer, new_salt)
+        
+        meta["recovery_question"] = new_question
+        meta["salt_recovery"] = base64.b64encode(new_salt).decode()
+        meta["wrapped_key_recovery"] = Fernet(new_key).encrypt(dek).decode()
+        
+        save_meta(meta)
+        sync_github_push()
+        
+        send_msg(chat_id, "✅ Tiklash savol-javobi va Salt muvaffaqiyatli yangilandi va sinxronizatsiya qilindi! (Matn xavfsizlik uchun chatdan o'chirildi)")
+        return
+
     # State Machine bo'yicha ma'lumotlar kiritish
     if sess["state"] != "unlocked":
         

@@ -1,18 +1,19 @@
-# 🔐 Telegram Pass Manager Bot
+# 🔐 SecVault Telegram Bot
 
-Ushbu bot shaxsiy parollaringiz va Gmail hisoblaringizni xavfsiz saqlash uchun yaratilgan. Barcha ma'lumotlar PBKDF2 shifrlash va tasodifiy tuz (salt) yordamida shifrlangan binary ko'rinishida `vault.bin` fayliga saqlanadi.
+Ushbu bot shaxsiy parollaringiz va Gmail hisoblaringizni xavfsiz saqlash uchun yaratilgan. Barcha ma'lumotlar PBKDF2 va Fernet (AES-128) algoritmlari yordamida shifrlangan binary ko'rinishida `accounts.enc` faylida saqlanadi.
 
-Dastur **faqat standart Python kutubxonalaridan** foydalangan holda yozilgan, shuning uchun hech qanday qo'shimcha plagin yoki paket o'rnatish shart emas (`pip install` kerak emas).
+Dastur **faqat standart Python kutubxonalari va `cryptography`** paketidan foydalanadi.
 
 ---
 
 ## ⚙️ Sozlash (Configuration)
 
-Loyiha papkasidagi `.env` faylini oching va quyidagi ma'lumotlarni kiriting:
+Loyiha papkasidagi `.env` faylini oching va quyidagi ma'lumotlarni kiriting (Render'ga deploy qilganda ularni `Environment Variables` bo'limiga kiritasiz):
 
 1. **`BOT_TOKEN`**: @BotFather orqali yaratilgan botingizning tokeni.
-2. **`ALLOWED_USER_ID`**: Sizning shaxsiy Telegram User ID'ingiz. Bot boshqa hech kimga javob bermasligi va ma'lumotlarni begonalardan himoya qilish uchun bu **shart**.
-   * *O'z ID'ingizni bilish uchun Telegram'da `@userinfobot` botiga biror xabar yuboring, u sizga ID raqamingizni ko'rsatadi.*
+2. **`ALLOWED_USER_ID`**: Sizning shaxsiy Telegram User ID'ingiz. Bot faqat sizga javob berishi uchun bu **shart**.
+3. **`GITHUB_TOKEN`**: GitHub Personal Access Token (PAT).
+4. **`GITHUB_REPO`**: GitHub repozitoriyangiz nomi (masalan: `fayzillo95/pass_manager_bot`).
 
 ---
 
@@ -26,26 +27,32 @@ python3 main.py
 
 ---
 
-## 📱 Bot buyruqlari va foydalanish
+## 📱 Bot buyruqlari va menyudan foydalanish
 
-Botingizga o'ting va quyidagi buyruqlarni yuboring:
+Botga kirib `/start` yozganingizdan keyin u qulflangan holatda bo'ladi. Uni **Seed** parolingiz bilan ochasiz (Unlock).
 
-### 1. Akkaunt qo'shish (`/add`)
-Format: `/add <gmail> <parol> <kalit>`
-* **Gmail:** Akkaunt pochtasi.
-* **Parol:** Akkaunt paroli.
-* **Kalit:** Akkauntni shifrlash uchun ishlatiladigan ixtiyoriy seed/parol (masalan: `meningmaxfiykodim`).
-* **Misol:**
-  `/add test@gmail.com parolim123 maxfiykalit`
+### 🖥️ Tugmalar Menyusi:
+* **📋 To'liq list:** Barcha akkauntlar va parollarni ochiq ko'rinishda chiqaradi.
+* **📧 Emaillar:** Faqat emaillar ro'yxatini ko'rsatadi.
+* **👁️ Masked list:** Emaillar va parollarni yashirin (masked) formatda ko'rsatadi.
+* **➕ Yangi qo'shish:** Akkaunt qo'shish jarayonini boshlaydi.
+* **✏️ Tahrirlash:** Mavjud akkaunt parolini tahrirlaydi.
+* **❌ O'chirish:** Akkauntni bazadan o'chiradi.
+* **🔄 GitHub Sync:** GitHub'dan yangi parollarni tortadi (`pull`) va local o'zgarishlarni GitHub'ga yuklaydi (`push`).
+* **🧹 Chatni tozalash:** Chatdagi barcha ochiq parollar yozishmalarini Telegram'dan o'chirib tozalaydi.
+* **🔒 Qulflash:** Seansni yopadi va chatni avtomatik tozalaydi.
 
-> 💡 *Eslatma: Har bir akkaunt uchun har xil yoki bir xil kalit (seed) ishlatishingiz mumkin.*
+---
 
-### 2. Akkauntlarni ko'rish (`/get`)
-Format: `/get <kalit>`
-* Kiritilgan kalit (seed) yordamida shifrlangan bazadagi ma'lumotlar tekshiriladi va faqat shu kalit bilan shifrlangan akkauntlar yechilib, ko'rsatiladi.
-* **Misol:**
-  `/get maxfiykalit`
+### 🔑 Maxfiy Sozlamalar Buyruqlari (Commands):
 
-### 3. Ma'lumotlarni o'chirish (`/clear`)
-Bazada saqlangan barcha ma'lumotlarni to'liq o'chirib tashlaydi.
-* **Buyruq:** `/clear`
+Ushbu buyruqlar faqat botga **kirilgan (unlocked)** holatda ishlaydi:
+
+#### 1. GitHub Sozlamalari:
+* `/set_token <token>` — GitHub Personal Access Tokenni o'rnatadi. (Maxfiylik uchun yuborgan xabaringiz chatdan o'chiriladi).
+* `/set_repo <owner/repo>` — Ma'lumotlar saqlanadigan GitHub reponi o'rnatadi.
+* `/github_status` — Hozirgi ulanish va sozlamalar holatini ko'rsatadi.
+
+#### 2. Seed va Salt Yangilash:
+* `/change_seed <yangi_seed>` — Master parolingizni (Seed) o'zgartiradi va **yangi tasodifiy Tuz (Salt) yaratib** barcha ma'lumotlarni qayta shifrlaydi. (Yuborgan xabaringiz chatdan o'chiriladi).
+* `/change_recovery <savol>|<javob>` — Tiklash savoli va javobini o'zgartiradi hamda **yangi tasodifiy Tiklash Tuzi (Recovery Salt) yaratib** kalitlarni qayta shifrlaydi. (Yuborgan xabaringiz chatdan o'chiriladi).
