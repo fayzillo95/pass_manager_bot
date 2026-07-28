@@ -75,7 +75,7 @@ def track_msg(chat_id, msg_id):
 
 # Xabar yuborish va ID sini saqlab qolish
 def send_msg(chat_id, text, reply_markup=None, parse_mode=None):
-    params = {"chat_id": chat_id, "text": text}
+    params = {"chat_id": chat_id, "text": text, "protect_content": True}
     if reply_markup:
         params["reply_markup"] = reply_markup if isinstance(reply_markup, str) else json.dumps(reply_markup)
     if parse_mode:
