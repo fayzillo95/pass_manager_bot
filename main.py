@@ -215,7 +215,7 @@ def sync_github_push():
         
         # Fayllarni gitga kiritish va push qilish
         subprocess.run(["git", "add", "-f", "accounts.enc", "vault.meta.json"], cwd=REPO_DIR, check=True)
-        subprocess.run(["git", "commit", "-m", "backup: update vault data in real-time"], cwd=REPO_DIR, capture_output=True)
+        subprocess.run(["git", "commit", "-m", "backup: update vault data in real-time [skip ci]"], cwd=REPO_DIR, capture_output=True)
         subprocess.run(["git", "push", "origin", "main"], cwd=REPO_DIR, check=True)
         
         print("Muvaffaqiyatli GitHub'ga push qilindi!")
